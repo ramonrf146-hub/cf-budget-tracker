@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CF Budget Tracker</title>
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#3B6D11" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="CF Budget" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #ffffff; --bg2: #f5f5f3; --bg3: #eeede8;
+    --text: #1a1a1a; --text2: #666660; --text3: #999990;
+    --border: rgba(0,0,0,0.12); --border2: rgba(0,0,0,0.22);
+    --info-bg: #e6f1fb; --info-text: #185FA5;
+    --success-bg: #eaf3de; --success-text: #3B6D11;
+    --warn-bg: #faeeda; --warn-text: #BA7517;
+    --danger-bg: #fcebeb; --danger-text: #A32D2D; --danger-border: rgba(163,45,45,0.3);
+    --radius: 8px; --radius-lg: 12px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1e1e1c; --bg2: #2a2a28; --bg3: #333330;
+      --text: #f0efe8; --text2: #aaa99f; --text3: #77766e;
+      --border: rgba(255,255,255,0.12); --border2: rgba(255,255,255,0.22);
+      --info-bg: #0c2a45; --info-text: #85B7EB;
+      --success-bg: #172a08; --success-text: #97C459;
+      --warn-bg: #2e1e04; --warn-text: #EF9F27;
+      --danger-bg: #2e0a0a; --danger-text: #F09595; --danger-border: rgba(240,149,149,0.3);
+    }
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg2); color: var(--text); font-size: 16px; min-height: 100vh; }
+  #app { max-width: 680px; margin: 0 auto; padding: 1rem; }
+  button { font-family: inherit; cursor: pointer; font-size: 13px; padding: 6px 14px; border-radius: var(--radius); border: 0.5px solid var(--border2); background: var(--bg); color: var(--text); }
+  button:hover { background: var(--bg3); }
+  button.primary { background: var(--success-bg); color: var(--success-text); border-color: transparent; }
+  button.danger-btn { color: var(--danger-text); border-color: var(--danger-border); background: transparent; padding: 3px 8px; font-size: 12px; }
+  input, select, textarea { font-family: inherit; font-size: 14px; padding: 7px 10px; border-radius: var(--radius); border: 0.5px solid var(--border2); background: var(--bg); color: var(--text); width: 100%; outline: none; }
+  input:focus, select:focus { border-color: var(--success-text); box-shadow: 0 0 0 2px rgba(59,109,17,0.15); }
+  .card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 1rem 1.25rem; }
+  .metric { background: var(--bg2); border-radius: var(--radius); padding: 10px 12px; }
+  .metric-label { font-size: 11px; color: var(--text2); margin-bottom: 3px; }
+  .metric-val { font-size: 16px; font-weight: 500; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .grid4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+  .flex-between { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .flex-gap { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .muted { color: var(--text2); font-size: 13px; }
+  .progress-wrap { height: 8px; background: var(--bg3); border-radius: 4px; overflow: hidden; }
+  .progress-bar { height: 100%; border-radius: 4px; transition: width 0.3s; }
+  .badge { font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 20px; display: inline-block; }
+  .expense-row { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 0.5px solid var(--border); }
+  .expense-row:last-child { border-bottom: none; }
+  .section-subform { background: var(--bg2); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 14px; }
+  #toast { position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg); font-size: 13px; padding: 8px 18px; border-radius: 20px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 999; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast"></div>
+<script>
+const PROJECTS_KEY = 'cf_projects_v1';
+const BUDGETS_KEY  = 'cf_budgets_v1';
+const CATS = ['Materiales','Mano de obra','Equipos','Herramientas','Transporte','Otros'];
+const CAT_COLORS = {
+  'Materiales':   { bg:'#e6f1fb', text:'#185FA5' },
+  'Mano de obra': { bg:'#eaf3de', text:'#3B6D11' },
+  'Equipos':      { bg:'#faeeda', text:'#BA7517'  },
+  'Herramientas': { bg:'#EEEDFE', text:'#3C3489'  },
+  'Transporte':   { bg:'#E1F5EE', text:'#085041'  },
+  'Otros':        { bg:'#f1efe8', text:'#5F5E5A'  },
+};
+
+function fmt(n) { return '$' + (Math.round((n||0)*100)/100).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function genId() { return Date.now().toString(36)+Math.random().toString(36).slice(2,5); }
+function load(k,def) { try { return JSON.parse(localStorage.getItem(k))||def; } catch { return def; } }
+function save(k,v) { try { localStorage.setItem(k,JSON.stringify(v)); } catch {} }
+function toast(msg) { const t=document.getElementById('toast'); t.textContent=msg; t.style.opacity=1; setTimeout(()=>t.style.opacity=0,2000); }
+function progressBar(spent,total) {
+  const pct=total>0?Math.min(100,(spent/total)*100):0;
+  const color=pct>=100?'var(--danger-text)':pct>=80?'#BA7517':'#185FA5';
+  return `<div class="progress-wrap"><div class="progress-bar" style="width:${pct}%;background:${color}"></div></div>`;
+}
+function catBadge(cat) {
+  const c=CAT_COLORS[cat]||CAT_COLORS['Otros'];
+  return `<span class="badge" style="background:${c.bg};color:${c.text}">${cat}</span>`;
+}
+
+let state = {
+  view: 'dashboard',
+  projects: load(PROJECTS_KEY, []),
+  budgets: load(BUDGETS_KEY, {}),
+  selId: null,
+  showBudgetForm: false,
+  showExpForm: false,
+  bf: { total:'', cats:{} },
+  ef: { desc:'', monto:'', cat:'Materiales', fecha:new Date().toISOString().slice(0,10), proveedor:'' },
+};
+
+function setState(patch) { Object.assign(state,patch); render(); }
+
+function renderDashboard() {
+  const ps = state.projects.map(p => {
+    const b = state.budgets[p.id]||{total:0,expenses:[]};
+    const spent = (b.expenses||[]).reduce((s,e)=>s+e.monto,0);
+    return {...p, total:b.total||0, spent};
+  });
+  const totPres = ps.reduce((s,p)=>s+p.total,0);
+  const totGast = ps.reduce((s,p)=>s+p.spent,0);
+  const totDisp = totPres - totGast;
+  const enRiesgo = ps.filter(p=>p.total>0&&p.spent/p.total>=0.8).length;
+
+  return `
+  <div class="flex-between" style="margin-bottom:20px">
+    <div>
+      <h2 style="font-size:18px;font-weight:500">CF Budget Tracker</h2>
+      <p class="muted">Presupuestos y gastos por proyecto</p>
+    </div>
+  </div>
+  <div class="grid4" style="margin-bottom:24px">
+    <div class="metric"><div class="metric-label">Presupuesto total</div><div class="metric-val">${fmt(totPres)}</div></div>
+    <div class="metric"><div class="metric-label">Total gastado</div><div class="metric-val" style="color:#185FA5">${fmt(totGast)}</div></div>
+    <div class="metric"><div class="metric-label">Disponible</div><div class="metric-val" style="color:${totDisp<0?'var(--danger-text)':'#3B6D11'}">${fmt(totDisp)}</div></div>
+    <div class="metric"><div class="metric-label">En riesgo</div><div class="metric-val" style="color:${enRiesgo>0?'#BA7517':'var(--text)'}">${enRiesgo}</div></div>
+  </div>
+  ${ps.length===0?`<div style="text-align:center;padding:3rem 1rem;color:var(--text2);font-size:14px">No hay proyectos en el CF Project Tracker aún.</div>`:`
+  <div style="display:flex;flex-direction:column;gap:8px">
+    ${ps.map(p=>{
+      const pct=p.total>0?Math.min(100,(p.spent/p.total)*100):0;
+      const over=p.total>0&&p.spent>p.total;
+      const warn=p.total>0&&pct>=80&&!over;
+      return `<div class="card" onclick="openProj('${p.id}')" style="cursor:pointer;border-color:${over?'var(--danger-border)':warn?'rgba(186,117,23,0.25)':'var(--border)'}">
+        <div class="flex-between" style="margin-bottom:10px">
+          <div>
+            ${p.numero?`<p style="font-size:11px;color:var(--text2);font-weight:500;margin-bottom:2px">${p.numero}</p>`:''}
+            <p style="font-weight:500;font-size:14px">${p.nombre}</p>
+          </div>
+          <div>
+            ${over?`<span class="badge" style="background:var(--danger-bg);color:var(--danger-text)">Sobre presupuesto</span>`:''}
+            ${warn?`<span class="badge" style="background:var(--warn-bg);color:var(--warn-text)">+80% usado</span>`:''}
+          </div>
+        </div>
+        <div class="flex-between" style="font-size:13px;margin-bottom:6px">
+          <span style="color:var(--text2)">Gastado: <strong style="font-weight:500;color:var(--text)">${fmt(p.spent)}</strong></span>
+          <span style="color:var(--text2)">Presupuesto: <strong style="font-weight:500">${p.total>0?fmt(p.total):'Sin definir'}</strong></span>
+        </div>
+        ${progressBar(p.spent,p.total)}
+        ${p.total>0?`<p style="font-size:12px;color:var(--text2);text-align:right;margin-top:4px">${pct.toFixed(1)}% usado · disponible: ${fmt(p.total-p.spent)}</p>`:''}
+      </div>`;
+    }).join('')}
+  </div>`}`;
+}
+
+function renderDetail() {
+  const p = state.projects.find(x=>x.id===state.selId);
+  if (!p) return '';
+  const b = state.budgets[state.selId]||{total:0,catBudgets:{},expenses:[]};
+  const expenses = b.expenses||[];
+  const total = b.total||0;
+  const spent = expenses.reduce((s,e)=>s+e.monto,0);
+  const available = total-spent;
+  const pct = total>0?Math.min(100,(spent/total)*100):0;
+  const over = total>0&&spent>total;
+  const catTotals = {};
+  CATS.forEach(c=>{ catTotals[c]=expenses.filter(e=>e.cat===c).reduce((s,e)=>s+e.monto,0); });
+  const sorted = [...expenses].sort((a,b)=>b.fecha.localeCompare(a.fecha));
+
+  const bf = state.bf;
+  const ef = state.ef;
+
+  return `
+  <button onclick="nav('dashboard')" style="margin-bottom:16px">← Proyectos</button>
+  <div class="card" style="margin-bottom:12px">
+    <div class="flex-between" style="margin-bottom:14px">
+      <div>
+        ${p.numero?`<p style="font-size:12px;color:var(--text2);font-weight:500;margin-bottom:2px">${p.numero}</p>`:''}
+        <h2 style="font-size:18px;font-weight:500">${p.nombre}</h2>
+      </div>
+      <button onclick="toggleBudgetForm()">${state.showBudgetForm?'Cancelar':'Editar presupuesto'}</button>
+    </div>
+
+    ${state.showBudgetForm?`
+    <div class="section-subform">
+      <p style="font-size:13px;font-weight:500;margin-bottom:10px">Definir presupuesto</p>
+      <div style="margin-bottom:10px">
+        <label style="font-size:13px;color:var(--text2);display:block;margin-bottom:4px">Presupuesto total ($)</label>
+        <input id="bf-total" type="number" placeholder="0.00" value="${bf.total||''}" />
+      </div>
+      <p style="font-size:12px;color:var(--text2);margin-bottom:8px">Por categoría (opcional)</p>
+      <div class="grid2" style="margin-bottom:12px">
+        ${CATS.map(c=>`<div>
+          <label style="font-size:12px;color:var(--text2);display:block;margin-bottom:3px">${c}</label>
+          <input id="bf-cat-${c.replace(/ /g,'_')}" type="number" placeholder="0.00" value="${bf.cats[c]||''}" />
+        </div>`).join('')}
+      </div>
+      <button class="primary" onclick="saveBudget()">Guardar presupuesto</button>
+    </div>`:''}
+
+    <div class="grid4" style="margin-bottom:12px">
+      <div class="metric"><div class="metric-label">Presupuesto</div><div class="metric-val">${total>0?fmt(total):'Sin definir'}</div></div>
+      <div class="metric"><div class="metric-label">Gastado</div><div class="metric-val" style="color:#185FA5">${fmt(spent)}</div></div>
+      <div class="metric"><div class="metric-label">Disponible</div><div class="metric-val" style="color:${over?'var(--danger-text)':'#3B6D11'}">${fmt(available)}</div></div>
+      <div class="metric"><div class="metric-label">% usado</div><div class="metric-val" style="color:${over?'var(--danger-text)':pct>=80?'#BA7517':'var(--text)'}">${total>0?pct.toFixed(1)+'%':'—'}</div></div>
+    </div>
+    ${total>0?progressBar(spent,total):''}
+    ${over?`<p style="font-size:12px;color:var(--danger-text);font-weight:500;margin-top:6px">Presupuesto excedido por ${fmt(spent-total)}</p>`:''}
+  </div>
+
+  <div class="card" style="margin-bottom:12px">
+    <p style="font-size:13px;font-weight:500;margin-bottom:12px">Desglose por categoría</p>
+    ${CATS.filter(c=>catTotals[c]>0||(b.catBudgets||{})[c]).map(c=>{
+      const cs=catTotals[c]||0; const cb=(b.catBudgets||{})[c]||0;
+      return `<div style="margin-bottom:10px">
+        <div class="flex-between" style="margin-bottom:4px">
+          ${catBadge(c)}
+          <span style="font-size:13px"><strong style="font-weight:500">${fmt(cs)}</strong>${cb>0?`<span style="color:var(--text2)"> / ${fmt(cb)}</span>`:''}</span>
+        </div>
+        ${cb>0?progressBar(cs,cb):''}
+      </div>`;
+    }).join('')||`<p style="font-size:13px;color:var(--text2)">Sin gastos registrados aún.</p>`}
+  </div>
+
+  <div class="flex-between" style="margin-bottom:10px">
+    <h3 style="font-size:15px;font-weight:500">Gastos registrados</h3>
+    <button class="primary" onclick="toggleExpForm()">${state.showExpForm?'Cancelar':'+ Agregar gasto'}</button>
+  </div>
+
+  ${state.showExpForm?`
+  <div class="card" style="margin-bottom:12px">
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div>
+        <label style="font-size:13px;color:var(--text2);display:block;margin-bottom:4px">Descripción *</label>
+        <input id="ef-desc" placeholder="Ej: Tubería PVC 4 pulgadas" value="${ef.desc}" />
+      </div>
+      <div class="grid2">
+        <div>
+          <label style="font-size:13px;color:var(--text2);display:block;margin-bottom:4px">Monto ($) *</label>
+          <input id="ef-monto" type="number" step="0.01" placeholder="0.00" value="${ef.monto}" />
+        </div>
+        <div>
+          <label style="font-size:13px;color:var(--text2);display:block;margin-bottom:4px">Categoría</label>
+          <select id="ef-cat">${CATS.map(c=>`<option value="${c}" ${ef.cat===c?'selected':''}>${c}</option>`).join('')}</select>
+        </div>
+      </div>
+      <div class="grid2">
+        <div>
+          <label style="font-size:13px;color:var(--text2);display:block;margin-bottom:4px">Fecha</label>
+          <input id="ef-fecha" type="date" value="${ef.fecha}" />
+        </div>
+        <div>
+          <label style="font-size:13px;color:var(--text2);display:block;margin-bottom:4px">Proveedor / Contratista</label>
+          <input id="ef-prov" placeholder="Nombre o empresa" value="${ef.proveedor}" />
+        </div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="primary" style="padding:7px 18px" onclick="addExpense()">Guardar gasto</button>
+        <button style="padding:7px 18px" onclick="toggleExpForm()">Cancelar</button>
+      </div>
+    </div>
+  </div>`:''}
+
+  ${sorted.length===0?`
+  <div class="card" style="text-align:center;padding:2rem 1rem;color:var(--text2);font-size:14px">No hay gastos registrados. Agrega el primero.</div>`:`
+  <div class="card" style="padding:0;overflow:hidden">
+    ${sorted.map(e=>`
+    <div class="expense-row">
+      <div style="flex:1;min-width:0">
+        <p style="font-weight:500;font-size:14px;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.desc}</p>
+        <div class="flex-gap">${catBadge(e.cat)}${e.proveedor?`<span style="font-size:11px;color:var(--text2)">${e.proveedor}</span>`:''}<span style="font-size:11px;color:var(--text2)">${e.fecha?.split('-').reverse().join('/')}</span></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
+        <span style="font-weight:500;font-size:15px">${fmt(e.monto)}</span>
+        <button class="danger-btn" onclick="delExpense('${e.id}')">×</button>
+      </div>
+    </div>`).join('')}
+    <div style="padding:10px 16px;background:var(--bg2);display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:13px;color:var(--text2)">Total gastado</span>
+      <span style="font-size:16px;font-weight:500">${fmt(spent)}</span>
+    </div>
+  </div>`}`;
+}
+
+function render() {
+  const app = document.getElementById('app');
+  if (state.view==='dashboard') app.innerHTML = renderDashboard();
+  else if (state.view==='detail') app.innerHTML = renderDetail();
+}
+
+function nav(v) { state.view=v; state.showBudgetForm=false; state.showExpForm=false; render(); }
+
+function openProj(id) {
+  state.selId=id;
+  state.view='detail';
+  state.showBudgetForm=false;
+  state.showExpForm=false;
+  const b=state.budgets[id]||{total:0,catBudgets:{},expenses:[]};
+  state.bf={ total:b.total||'', cats:{...(b.catBudgets||{})} };
+  render();
+}
+
+function toggleBudgetForm() {
+  state.showBudgetForm=!state.showBudgetForm;
+  if (state.showBudgetForm) state.showExpForm=false;
+  render();
+}
+
+function toggleExpForm() {
+  state.showExpForm=!state.showExpForm;
+  if (state.showExpForm) state.showBudgetForm=false;
+  render();
+}
+
+function saveBudget() {
+  const total=parseFloat(document.getElementById('bf-total').value)||0;
+  const catBudgets={};
+  CATS.forEach(c=>{
+    const el=document.getElementById('bf-cat-'+c.replace(/ /g,'_'));
+    if (el&&el.value) catBudgets[c]=parseFloat(el.value)||0;
+  });
+  state.budgets={...state.budgets,[state.selId]:{...(state.budgets[state.selId]||{expenses:[]}),total,catBudgets}};
+  save(BUDGETS_KEY,state.budgets);
+  state.showBudgetForm=false;
+  render();
+  toast('Presupuesto guardado');
+}
+
+function addExpense() {
+  const desc=document.getElementById('ef-desc').value.trim();
+  const monto=parseFloat(document.getElementById('ef-monto').value);
+  if (!desc||!monto) return;
+  const exp={
+    id:genId(),
+    desc,
+    monto,
+    cat:document.getElementById('ef-cat').value,
+    fecha:document.getElementById('ef-fecha').value,
+    proveedor:document.getElementById('ef-prov').value.trim(),
+  };
+  const cur=state.budgets[state.selId]||{total:0,catBudgets:{},expenses:[]};
+  state.budgets={...state.budgets,[state.selId]:{...cur,expenses:[...(cur.expenses||[]),exp]}};
+  save(BUDGETS_KEY,state.budgets);
+  state.ef={desc:'',monto:'',cat:'Materiales',fecha:new Date().toISOString().slice(0,10),proveedor:''};
+  state.showExpForm=false;
+  render();
+  toast('Gasto agregado');
+}
+
+function delExpense(expId) {
+  if (!confirm('¿Eliminar este gasto?')) return;
+  const cur=state.budgets[state.selId];
+  state.budgets={...state.budgets,[state.selId]:{...cur,expenses:cur.expenses.filter(e=>e.id!==expId)}};
+  save(BUDGETS_KEY,state.budgets);
+  render();
+  toast('Gasto eliminado');
+}
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(()=>{});
+}
+
+render();
+</script>
+</body>
+</html>
