@@ -4,19 +4,15 @@
   "description": "Control de presupuestos y gastos por proyecto - Costa Farms",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#ffffff",
+  "background_color": "#3B6D11",
   "theme_color": "#3B6D11",
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "https://placehold.co/192x192/3B6D11/ffffff?text=CFB",
-      "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "https://placehold.co/512x512/3B6D11/ffffff?text=CFB",
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='112' fill='%233B6D11'/%3E%3Cellipse cx='256' cy='393' rx='148' ry='40' fill='rgba(255,255,255,0.2)'/%3E%3Crect x='108' y='316' width='296' height='40' fill='%233B6D11'/%3E%3Cellipse cx='256' cy='316' rx='148' ry='40' fill='rgba(255,255,255,0.25)'/%3E%3Crect x='108' y='265' width='296' height='40' fill='%233B6D11'/%3E%3Cellipse cx='256' cy='265' rx='148' ry='40' fill='rgba(255,255,255,0.3)'/%3E%3Crect x='108' y='214' width='296' height='40' fill='%233B6D11'/%3E%3Cellipse cx='256' cy='214' rx='148' ry='40' fill='rgba(255,255,255,0.92)'/%3E%3Ctext x='256' y='222' text-anchor='middle' dominant-baseline='middle' font-family='system-ui,sans-serif' font-size='42' font-weight='700' fill='%233B6D11'%3E%24%3C/text%3E%3Crect x='140' y='298' width='38' height='80' rx='5' fill='rgba(255,255,255,0.5)'/%3E%3Crect x='188' y='268' width='38' height='110' rx='5' fill='rgba(255,255,255,0.65)'/%3E%3Crect x='236' y='238' width='38' height='140' rx='5' fill='rgba(255,255,255,0.82)'/%3E%3Crect x='284' y='283' width='38' height='95' rx='5' fill='rgba(255,255,255,0.58)'/%3E%3Crect x='332' y='258' width='38' height='120' rx='5' fill='rgba(255,255,255,0.7)'/%3E%3C/svg%3E",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
     }
   ]
 }
