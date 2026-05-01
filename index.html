@@ -1,271 +1,364 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>CF Budget Tracker</title>
-<link rel="manifest" href="manifest.json" />
-<meta name="theme-color" content="#3B6D11" />
-<meta name="apple-mobile-web-app-capable" content="yes" />
-<meta name="apple-mobile-web-app-title" content="CF Budget" />
-<style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  :root {
-    --bg: #ffffff; --bg2: #f5f5f3; --bg3: #eeede8;
-    --text: #1a1a1a; --text2: #666660;
-    --border: rgba(0,0,0,0.12); --border2: rgba(0,0,0,0.22);
-    --info-bg: #e6f1fb; --info-text: #185FA5;
-    --success-bg: #eaf3de; --success-text: #3B6D11;
-    --warn-bg: #faeeda; --warn-text: #BA7517;
-    --danger-bg: #fcebeb; --danger-text: #A32D2D; --danger-border: rgba(163,45,45,0.3);
-    --radius: 8px; --radius-lg: 12px;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #1e1e1c; --bg2: #2a2a28; --bg3: #333330;
-      --text: #f0efe8; --text2: #aaa99f;
-      --border: rgba(255,255,255,0.12); --border2: rgba(255,255,255,0.22);
-      --info-bg: #0c2a45; --info-text: #85B7EB;
-      --success-bg: #172a08; --success-text: #97C459;
-      --warn-bg: #2e1e04; --warn-text: #EF9F27;
-      --danger-bg: #2e0a0a; --danger-text: #F09595; --danger-border: rgba(240,149,149,0.3);
-    }
-  }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg2); color: var(--text); font-size: 16px; min-height: 100vh; }
-  #app { max-width: 680px; margin: 0 auto; padding: 1rem; }
-  button { font-family: inherit; cursor: pointer; font-size: 13px; padding: 6px 14px; border-radius: var(--radius); border: 0.5px solid var(--border2); background: var(--bg); color: var(--text); }
-  button:hover { background: var(--bg3); }
-  button.primary { background: var(--success-bg); color: var(--success-text); border-color: transparent; }
-  button.danger-btn { color: var(--danger-text); border-color: var(--danger-border); background: transparent; padding: 3px 8px; font-size: 12px; }
-  input, select { font-family: inherit; font-size: 14px; padding: 7px 10px; border-radius: var(--radius); border: 0.5px solid var(--border2); background: var(--bg); color: var(--text); width: 100%; outline: none; }
-  input:focus, select:focus { border-color: var(--success-text); box-shadow: 0 0 0 2px rgba(59,109,17,0.15); }
-  .card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 1rem 1.25rem; }
-  .metric { background: var(--bg2); border-radius: var(--radius); padding: 10px 12px; }
-  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .grid4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
-  .flex-between { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .flex-gap { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .muted { color: var(--text2); font-size: 13px; }
-  .progress-wrap { height: 8px; background: var(--bg3); border-radius: 4px; overflow: hidden; }
-  .progress-bar { height: 100%; border-radius: 4px; transition: width 0.3s; }
-  .badge { font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 20px; display: inline-block; }
-  .expense-row { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 0.5px solid var(--border); }
-  .expense-row:last-child { border-bottom: none; }
-  .spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid var(--border2); border-top-color: var(--success-text); border-radius: 50%; animation: spin 0.7s linear infinite; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  #toast { position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg); font-size: 13px; padding: 8px 18px; border-radius: 20px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 999; white-space: nowrap; }
-</style>
-</head>
-<body>
-<div id="app"><div style="text-align:center;padding:3rem 1rem;color:var(--text2)"><div class="spinner" style="margin:0 auto 12px"></div><p>Conectando...</p></div></div>
-<div id="toast"></div>
+import { useState, useEffect } from "react";
 
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+const PROJECTS_KEY = "cf_projects_v1";
+const BUDGETS_KEY = "cf_budgets_v1";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyA5wpULMf62wVgSixlN6COhrnAyl1K9njs",
-  authDomain: "cf-tracker-b67bb.firebaseapp.com",
-  projectId: "cf-tracker-b67bb",
-  storageBucket: "cf-tracker-b67bb.firebasestorage.app",
-  messagingSenderId: "853276185297",
-  appId: "1:853276185297:web:6d1123d633c14507d16bf0"
-};
-
-const fbApp = initializeApp(firebaseConfig);
-const db = getFirestore(fbApp);
-
-const CATS = ['Materiales','Mano de obra','Equipos','Herramientas','Transporte','Otros'];
+const EXPENSE_CATS = ["Materiales", "Mano de obra", "Equipos", "Herramientas", "Transporte", "Otros"];
 const CAT_COLORS = {
-  'Materiales':   { bg:'#e6f1fb', text:'#185FA5' },
-  'Mano de obra': { bg:'#eaf3de', text:'#3B6D11' },
-  'Equipos':      { bg:'#faeeda', text:'#BA7517'  },
-  'Herramientas': { bg:'#EEEDFE', text:'#3C3489'  },
-  'Transporte':   { bg:'#E1F5EE', text:'#085041'  },
-  'Otros':        { bg:'#f1efe8', text:'#5F5E5A'  },
+  "Materiales":   { bg: "#e6f1fb", text: "#185FA5" },
+  "Mano de obra": { bg: "#eaf3de", text: "#3B6D11" },
+  "Equipos":      { bg: "#faeeda", text: "#BA7517" },
+  "Herramientas": { bg: "#EEEDFE", text: "#3C3489" },
+  "Transporte":   { bg: "#E1F5EE", text: "#085041" },
+  "Otros":        { bg: "#f1efe8", text: "#5F5E5A" },
 };
 
-function fmt(n) { return '$'+(Math.round((n||0)*100)/100).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
-function genId() { return Date.now().toString(36)+Math.random().toString(36).slice(2,5); }
-function toast(msg) { const t=document.getElementById('toast'); t.textContent=msg; t.style.opacity=1; setTimeout(()=>t.style.opacity=0,2500); }
-function catBadge(cat) { const c=CAT_COLORS[cat]||CAT_COLORS['Otros']; return `<span class="badge" style="background:${c.bg};color:${c.text}">${cat}</span>`; }
-function progressBar(spent,total) { const pct=total>0?Math.min(100,(spent/total)*100):0; const color=pct>=100?'var(--danger-text)':pct>=80?'#BA7517':'#185FA5'; return `<div class="progress-wrap"><div class="progress-bar" style="width:${pct}%;background:${color}"></div></div>`; }
+const fmt = (n) => "$" + (Math.round((n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const genId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
 
-let state = { view:'dashboard', projects:[], budgets:{}, selId:null, showBF:false, showEF:false, ef:{ desc:'',monto:'',cat:'Materiales',fecha:new Date().toISOString().slice(0,10),proveedor:'' } };
+function loadData(key) { try { return JSON.parse(localStorage.getItem(key)) || (key === BUDGETS_KEY ? {} : []); } catch { return key === BUDGETS_KEY ? {} : []; } }
+function saveData(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} }
 
-onSnapshot(query(collection(db,'projects'),orderBy('createdAt','asc')), snap => {
-  state.projects = snap.docs.map(d=>({id:d.id,...d.data()}));
-  render();
-});
-
-onSnapshot(collection(db,'budgets'), snap => {
-  state.budgets = {};
-  snap.docs.forEach(d=>{ state.budgets[d.id]={docId:d.id,...d.data()}; });
-  render();
-});
-
-function render() {
-  const app = document.getElementById('app');
-  if (state.view==='dashboard') app.innerHTML = renderDashboard();
-  else if (state.view==='detail') app.innerHTML = renderDetail();
+function BudgetBar({ spent, total }) {
+  const pct = total > 0 ? Math.min(100, (spent / total) * 100) : 0;
+  const color = pct >= 100 ? "var(--color-text-danger)" : pct >= 80 ? "#BA7517" : "#185FA5";
+  const bgColor = pct >= 100 ? "var(--color-background-danger)" : pct >= 80 ? "#faeeda" : "#e6f1fb";
+  return (
+    <div style={{ width: "100%", height: 8, background: "var(--color-background-tertiary)", borderRadius: 4, overflow: "hidden" }}>
+      <div style={{ width: `${pct}%`, height: "100%", background: color, borderRadius: 4, transition: "width 0.3s" }} />
+    </div>
+  );
 }
 
-function renderDashboard() {
-  const ps = state.projects.map(p => {
-    const b = state.budgets[p.id]||{total:0,expenses:[]};
-    const spent = (b.expenses||[]).reduce((s,e)=>s+e.monto,0);
-    return {...p,total:b.total||0,spent};
-  });
-  const totP=ps.reduce((s,p)=>s+p.total,0), totG=ps.reduce((s,p)=>s+p.spent,0);
-  const enRiesgo=ps.filter(p=>p.total>0&&p.spent/p.total>=0.8).length;
-  return `
-  <div class="flex-between" style="margin-bottom:20px">
-    <div><h2 style="font-size:18px;font-weight:500">CF Budget Tracker</h2><p class="muted">Presupuestos y gastos por proyecto</p></div>
-  </div>
-  <div class="grid4" style="margin-bottom:24px">
-    <div class="metric"><p style="font-size:12px;color:var(--text2);margin-bottom:3px">Presupuesto total</p><p style="font-size:18px;font-weight:500">${fmt(totP)}</p></div>
-    <div class="metric"><p style="font-size:12px;color:var(--text2);margin-bottom:3px">Total gastado</p><p style="font-size:18px;font-weight:500;color:#185FA5">${fmt(totG)}</p></div>
-    <div class="metric"><p style="font-size:12px;color:var(--text2);margin-bottom:3px">Disponible</p><p style="font-size:18px;font-weight:500;color:${totP-totG<0?'var(--danger-text)':'#3B6D11'}">${fmt(totP-totG)}</p></div>
-    <div class="metric"><p style="font-size:12px;color:var(--text2);margin-bottom:3px">En riesgo</p><p style="font-size:18px;font-weight:500;color:${enRiesgo>0?'#BA7517':'var(--text)'}">${enRiesgo}</p></div>
-  </div>
-  ${ps.length===0?`<div style="text-align:center;padding:3rem 1rem;color:var(--text2);font-size:14px">No hay proyectos aún.</div>`:`
-  <div style="display:flex;flex-direction:column;gap:8px">
-    ${ps.map(p=>{
-      const pct=p.total>0?Math.min(100,(p.spent/p.total)*100):0;
-      const over=p.total>0&&p.spent>p.total, warn=p.total>0&&pct>=80&&!over;
-      return `<div class="card" onclick="openProj('${p.id}')" style="cursor:pointer;border-color:${over?'var(--danger-border)':warn?'rgba(186,117,23,0.25)':'var(--border)'}">
-        <div class="flex-between" style="margin-bottom:10px">
-          <div>${p.numero?`<p style="font-size:11px;color:var(--text2);font-weight:500;margin-bottom:2px">${p.numero}</p>`:''}<p style="font-weight:500;font-size:14px">${p.nombre}</p></div>
-          <div>${over?`<span class="badge" style="background:var(--danger-bg);color:var(--danger-text)">Sobre presupuesto</span>`:''}${warn?`<span class="badge" style="background:var(--warn-bg);color:var(--warn-text)">+80% usado</span>`:''}</div>
+function CatBadge({ cat }) {
+  const c = CAT_COLORS[cat] || CAT_COLORS["Otros"];
+  return <span style={{ fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 20, background: c.bg, color: c.text, display: "inline-block" }}>{cat}</span>;
+}
+
+export default function App() {
+  const [projects, setProjects] = useState([]);
+  const [budgets, setBudgets] = useState({});
+  const [view, setView] = useState("dashboard");
+  const [selProjId, setSelProjId] = useState(null);
+  const [loaded, setLoaded] = useState(false);
+
+  const [budgetForm, setBudgetForm] = useState({ total: "", cats: {} });
+  const [expForm, setExpForm] = useState({ desc: "", monto: "", cat: "Materiales", fecha: new Date().toISOString().slice(0, 10), proveedor: "" });
+  const [showBudgetForm, setShowBudgetForm] = useState(false);
+  const [showExpForm, setShowExpForm] = useState(false);
+  const [editingExpId, setEditingExpId] = useState(null);
+
+  useEffect(() => {
+    setProjects(loadData(PROJECTS_KEY));
+    setBudgets(loadData(BUDGETS_KEY));
+    setLoaded(true);
+  }, []);
+
+  useEffect(() => { if (loaded) saveData(BUDGETS_KEY, budgets); }, [budgets, loaded]);
+
+  const selProj = projects.find(p => p.id === selProjId);
+  const bdata = selProjId ? (budgets[selProjId] || { total: 0, catBudgets: {}, expenses: [] }) : null;
+
+  const saveBudget = () => {
+    const total = parseFloat(budgetForm.total) || 0;
+    const catBudgets = {};
+    EXPENSE_CATS.forEach(c => { if (budgetForm.cats[c]) catBudgets[c] = parseFloat(budgetForm.cats[c]) || 0; });
+    const updated = { ...budgets, [selProjId]: { ...(budgets[selProjId] || { expenses: [] }), total, catBudgets } };
+    setBudgets(updated);
+    setShowBudgetForm(false);
+  };
+
+  const addExpense = () => {
+    if (!expForm.desc.trim() || !expForm.monto) return;
+    const cur = budgets[selProjId] || { total: 0, catBudgets: {}, expenses: [] };
+    let newExps;
+    if (editingExpId) {
+      newExps = (cur.expenses || []).map(e => e.id === editingExpId ? { ...e, desc: expForm.desc.trim(), monto: parseFloat(expForm.monto), cat: expForm.cat, fecha: expForm.fecha, proveedor: expForm.proveedor.trim() } : e);
+    } else {
+      const exp = { id: genId(), desc: expForm.desc.trim(), monto: parseFloat(expForm.monto), cat: expForm.cat, fecha: expForm.fecha, proveedor: expForm.proveedor.trim() };
+      newExps = [...(cur.expenses || []), exp];
+    }
+    const updated = { ...budgets, [selProjId]: { ...cur, expenses: newExps } };
+    setBudgets(updated);
+    setExpForm({ desc: "", monto: "", cat: "Materiales", fecha: new Date().toISOString().slice(0, 10), proveedor: "" });
+    setShowExpForm(false);
+    setEditingExpId(null);
+  };
+
+  const deleteExpense = (expId) => {
+    const cur = budgets[selProjId];
+    const updated = { ...budgets, [selProjId]: { ...cur, expenses: cur.expenses.filter(e => e.id !== expId) } };
+    setBudgets(updated);
+  };
+
+  const openProject = (id) => {
+    setSelProjId(id);
+    setView("detail");
+    setShowBudgetForm(false);
+    setShowExpForm(false);
+    const b = budgets[id] || { total: 0, catBudgets: {}, expenses: [] };
+    setBudgetForm({ total: b.total || "", cats: { ...b.catBudgets } });
+  };
+
+  const inputStyle = { width: "100%", boxSizing: "border-box", fontSize: 14, padding: "7px 10px", borderRadius: "var(--border-radius-md)", border: "0.5px solid var(--color-border-secondary)", background: "var(--color-background-primary)", color: "var(--color-text-primary)" };
+  const btnStyle = (primary) => ({ padding: "6px 14px", fontSize: 13, borderRadius: "var(--border-radius-md)", border: primary ? "none" : "0.5px solid var(--color-border-secondary)", background: primary ? "var(--color-background-info)" : "var(--color-background-primary)", color: primary ? "var(--color-text-info)" : "var(--color-text-primary)", cursor: "pointer" });
+
+  // --- DASHBOARD ---
+  if (view === "dashboard") {
+    const allStats = projects.map(p => {
+      const b = budgets[p.id] || { total: 0, expenses: [] };
+      const spent = (b.expenses || []).reduce((s, e) => s + e.monto, 0);
+      return { ...p, total: b.total || 0, spent };
+    });
+    const totalPresupuesto = allStats.reduce((s, p) => s + p.total, 0);
+    const totalGastado = allStats.reduce((s, p) => s + p.spent, 0);
+    const totalDisponible = totalPresupuesto - totalGastado;
+    const enRiesgo = allStats.filter(p => p.total > 0 && p.spent / p.total >= 0.8).length;
+
+    return (
+      <div style={{ padding: "1rem 0" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 10 }}>
+          <div>
+            <h2 style={{ fontSize: 18, fontWeight: 500, margin: 0 }}>CF Budget Tracker</h2>
+            <p style={{ margin: 0, fontSize: 13, color: "var(--color-text-secondary)" }}>Presupuestos y gastos por proyecto</p>
+          </div>
         </div>
-        <div class="flex-between" style="font-size:13px;margin-bottom:6px">
-          <span style="color:var(--text2)">Gastado: <strong style="font-weight:500;color:var(--text)">${fmt(p.spent)}</strong></span>
-          <span style="color:var(--text2)">Presupuesto: <strong style="font-weight:500">${p.total>0?fmt(p.total):'Sin definir'}</strong></span>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, marginBottom: 24 }}>
+          {[
+            { label: "Presupuesto total", val: fmt(totalPresupuesto), color: "var(--color-text-primary)" },
+            { label: "Total gastado", val: fmt(totalGastado), color: "#185FA5" },
+            { label: "Disponible", val: fmt(totalDisponible), color: totalDisponible < 0 ? "var(--color-text-danger)" : "#3B6D11" },
+            { label: "Proyectos en riesgo", val: enRiesgo, color: enRiesgo > 0 ? "#BA7517" : "var(--color-text-primary)" },
+          ].map(s => (
+            <div key={s.label} style={{ background: "var(--color-background-secondary)", borderRadius: "var(--border-radius-md)", padding: "12px 14px" }}>
+              <p style={{ margin: "0 0 4px", fontSize: 12, color: "var(--color-text-secondary)" }}>{s.label}</p>
+              <p style={{ margin: 0, fontSize: 20, fontWeight: 500, color: s.color }}>{s.val}</p>
+            </div>
+          ))}
         </div>
-        ${progressBar(p.spent,p.total)}
-        ${p.total>0?`<p style="font-size:12px;color:var(--text2);text-align:right;margin-top:4px">${pct.toFixed(1)}% usado · disponible: ${fmt(p.total-p.spent)}</p>`:''}
-      </div>`;
-    }).join('')}
-  </div>`}`;
-}
 
-function renderDetail() {
-  const p = state.projects.find(x=>x.id===state.selId);
-  if (!p) return '';
-  const b = state.budgets[state.selId]||{total:0,catBudgets:{},expenses:[]};
-  const expenses=b.expenses||[], total=b.total||0;
-  const spent=expenses.reduce((s,e)=>s+e.monto,0), available=total-spent;
-  const pct=total>0?Math.min(100,(spent/total)*100):0, over=total>0&&spent>total;
-  const catTotals={}; CATS.forEach(c=>{catTotals[c]=expenses.filter(e=>e.cat===c).reduce((s,e)=>s+e.monto,0);});
-  const sorted=[...expenses].sort((a,b2)=>b2.fecha.localeCompare(a.fecha));
-  const ef=state.ef;
-  return `
-  <button onclick="nav()" style="margin-bottom:16px">← Proyectos</button>
-  <div class="card" style="margin-bottom:12px">
-    <div class="flex-between" style="margin-bottom:14px">
-      <div>${p.numero?`<p style="font-size:12px;color:var(--text2);font-weight:500;margin-bottom:2px">${p.numero}</p>`:''}<h2 style="font-size:18px;font-weight:500">${p.nombre}</h2></div>
-      <button onclick="toggleBF()">${state.showBF?'Cancelar':'Editar presupuesto'}</button>
-    </div>
-    ${state.showBF?`
-    <div style="background:var(--bg2);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px">
-      <p style="font-size:13px;font-weight:500;margin-bottom:10px">Definir presupuesto</p>
-      <div style="margin-bottom:10px"><label style="font-size:13px;color:var(--text2);display:block;margin-bottom:4px">Presupuesto total ($)</label><input id="bf-total" type="number" placeholder="0.00" value="${b.total||''}" /></div>
-      <p style="font-size:12px;color:var(--text2);margin-bottom:8px">Por categoría (opcional)</p>
-      <div class="grid2" style="margin-bottom:12px">${CATS.map(c=>`<div><label style="font-size:12px;color:var(--text2);display:block;margin-bottom:3px">${c}</label><input id="bf-${c.replace(/ /g,'_')}" type="number" placeholder="0.00" value="${(b.catBudgets||{})[c]||''}" /></div>`).join('')}</div>
-      <button class="primary" onclick="saveBudget()">Guardar presupuesto</button>
-    </div>`:''}
-    <div class="grid4" style="margin-bottom:12px">
-      <div class="metric"><p style="font-size:11px;color:var(--text2);margin-bottom:3px">Presupuesto</p><p style="font-size:16px;font-weight:500">${total>0?fmt(total):'Sin definir'}</p></div>
-      <div class="metric"><p style="font-size:11px;color:var(--text2);margin-bottom:3px">Gastado</p><p style="font-size:16px;font-weight:500;color:#185FA5">${fmt(spent)}</p></div>
-      <div class="metric"><p style="font-size:11px;color:var(--text2);margin-bottom:3px">Disponible</p><p style="font-size:16px;font-weight:500;color:${over?'var(--danger-text)':'#3B6D11'}">${fmt(available)}</p></div>
-      <div class="metric"><p style="font-size:11px;color:var(--text2);margin-bottom:3px">% usado</p><p style="font-size:16px;font-weight:500;color:${over?'var(--danger-text)':pct>=80?'#BA7517':'var(--text)'}">${total>0?pct.toFixed(1)+'%':'—'}</p></div>
-    </div>
-    ${total>0?progressBar(spent,total):''}
-    ${over?`<p style="font-size:12px;color:var(--danger-text);font-weight:500;margin-top:6px">Excedido por ${fmt(spent-total)}</p>`:''}
-  </div>
-  <div class="card" style="margin-bottom:12px">
-    <p style="font-size:13px;font-weight:500;margin-bottom:12px">Desglose por categoría</p>
-    ${CATS.filter(c=>catTotals[c]>0||(b.catBudgets||{})[c]).map(c=>{
-      const cs=catTotals[c]||0, cb=(b.catBudgets||{})[c]||0;
-      return `<div style="margin-bottom:10px"><div class="flex-between" style="margin-bottom:4px">${catBadge(c)}<span style="font-size:13px"><strong style="font-weight:500">${fmt(cs)}</strong>${cb>0?`<span style="color:var(--text2)"> / ${fmt(cb)}</span>`:''}</span></div>${cb>0?progressBar(cs,cb):''}</div>`;
-    }).join('')||`<p style="font-size:13px;color:var(--text2)">Sin gastos aún.</p>`}
-  </div>
-  <div class="flex-between" style="margin-bottom:10px">
-    <h3 style="font-size:15px;font-weight:500">Gastos registrados</h3>
-    <button class="primary" onclick="toggleEF()">${state.showEF?'Cancelar':'+ Agregar gasto'}</button>
-  </div>
-  ${state.showEF?`
-  <div class="card" style="margin-bottom:12px">
-    <div style="display:flex;flex-direction:column;gap:10px">
-      <div><label style="font-size:13px;color:var(--text2);display:block;margin-bottom:4px">Descripción *</label><input id="ef-desc" placeholder="Ej: Tubería PVC 4 pulgadas" value="${ef.desc}" /></div>
-      <div class="grid2">
-        <div><label style="font-size:13px;color:var(--text2);display:block;margin-bottom:4px">Monto ($) *</label><input id="ef-monto" type="number" step="0.01" placeholder="0.00" value="${ef.monto}" /></div>
-        <div><label style="font-size:13px;color:var(--text2);display:block;margin-bottom:4px">Categoría</label><select id="ef-cat">${CATS.map(c=>`<option value="${c}" ${ef.cat===c?'selected':''}>${c}</option>`).join('')}</select></div>
+        {projects.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "3rem 1rem", color: "var(--color-text-secondary)", fontSize: 14 }}>
+            No hay proyectos en el CF Project Tracker aún.
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {allStats.map(p => {
+              const pct = p.total > 0 ? Math.min(100, (p.spent / p.total) * 100) : 0;
+              const over = p.total > 0 && p.spent > p.total;
+              const warn = p.total > 0 && pct >= 80 && !over;
+              return (
+                <div key={p.id} onClick={() => openProject(p.id)} style={{ background: "var(--color-background-primary)", border: `0.5px solid ${over ? "var(--color-border-danger)" : warn ? "#BA751740" : "var(--color-border-tertiary)"}`, borderRadius: "var(--border-radius-lg)", padding: "12px 16px", cursor: "pointer" }}
+                  onMouseEnter={e => e.currentTarget.style.borderColor = over ? "var(--color-border-danger)" : "var(--color-border-secondary)"}
+                  onMouseLeave={e => e.currentTarget.style.borderColor = over ? "var(--color-border-danger)" : warn ? "#BA751740" : "var(--color-border-tertiary)"}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10, gap: 8 }}>
+                    <div>
+                      {p.numero && <p style={{ margin: "0 0 2px", fontSize: 11, color: "var(--color-text-secondary)", fontWeight: 500 }}>{p.numero}</p>}
+                      <p style={{ margin: 0, fontWeight: 500, fontSize: 14 }}>{p.nombre}</p>
+                    </div>
+                    <div style={{ textAlign: "right", flexShrink: 0 }}>
+                      {over && <span style={{ fontSize: 11, fontWeight: 500, color: "var(--color-text-danger)", background: "var(--color-background-danger)", padding: "2px 8px", borderRadius: 20 }}>Sobre presupuesto</span>}
+                      {warn && <span style={{ fontSize: 11, fontWeight: 500, color: "#BA7517", background: "#faeeda", padding: "2px 8px", borderRadius: 20 }}>+80% usado</span>}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 6 }}>
+                    <span style={{ color: "var(--color-text-secondary)" }}>Gastado: <span style={{ fontWeight: 500, color: "var(--color-text-primary)" }}>{fmt(p.spent)}</span></span>
+                    <span style={{ color: "var(--color-text-secondary)" }}>Presupuesto: <span style={{ fontWeight: 500 }}>{p.total > 0 ? fmt(p.total) : "Sin definir"}</span></span>
+                  </div>
+                  <BudgetBar spent={p.spent} total={p.total} />
+                  {p.total > 0 && <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--color-text-secondary)", textAlign: "right" }}>{pct.toFixed(1)}% usado · disponible: {fmt(p.total - p.spent)}</p>}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
-      <div class="grid2">
-        <div><label style="font-size:13px;color:var(--text2);display:block;margin-bottom:4px">Fecha</label><input id="ef-fecha" type="date" value="${ef.fecha}" /></div>
-        <div><label style="font-size:13px;color:var(--text2);display:block;margin-bottom:4px">Proveedor / Contratista</label><input id="ef-prov" placeholder="Nombre o empresa" value="${ef.proveedor}" /></div>
+    );
+  }
+
+  // --- DETAIL ---
+  if (view === "detail" && selProj && bdata) {
+    const expenses = bdata.expenses || [];
+    const total = bdata.total || 0;
+    const spent = expenses.reduce((s, e) => s + e.monto, 0);
+    const available = total - spent;
+    const pct = total > 0 ? Math.min(100, (spent / total) * 100) : 0;
+    const over = total > 0 && spent > total;
+
+    const catTotals = {};
+    EXPENSE_CATS.forEach(c => { catTotals[c] = expenses.filter(e => e.cat === c).reduce((s, e) => s + e.monto, 0); });
+
+    const sortedExp = [...expenses].sort((a, b) => b.fecha.localeCompare(a.fecha));
+
+    return (
+      <div style={{ padding: "1rem 0" }}>
+        <button onClick={() => setView("dashboard")} style={{ ...btnStyle(false), marginBottom: 16 }}>← Proyectos</button>
+
+        {/* Header */}
+        <div style={{ background: "var(--color-background-primary)", border: "0.5px solid var(--color-border-tertiary)", borderRadius: "var(--border-radius-lg)", padding: "1rem 1.25rem", marginBottom: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+            <div>
+              {selProj.numero && <p style={{ margin: "0 0 2px", fontSize: 12, color: "var(--color-text-secondary)", fontWeight: 500 }}>{selProj.numero}</p>}
+              <h2 style={{ fontSize: 18, fontWeight: 500, margin: 0 }}>{selProj.nombre}</h2>
+            </div>
+            <button onClick={() => { setShowBudgetForm(v => !v); setBudgetForm({ total: bdata.total || "", cats: { ...(bdata.catBudgets || {}) } }); }} style={btnStyle(false)}>
+              {showBudgetForm ? "Cancelar" : "Editar presupuesto"}
+            </button>
+          </div>
+
+          {showBudgetForm && (
+            <div style={{ background: "var(--color-background-secondary)", borderRadius: "var(--border-radius-md)", padding: "12px 14px", marginBottom: 14 }}>
+              <p style={{ fontSize: 13, fontWeight: 500, margin: "0 0 10px" }}>Definir presupuesto</p>
+              <div style={{ marginBottom: 10 }}>
+                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Presupuesto total ($)</label>
+                <input style={inputStyle} type="number" placeholder="0.00" value={budgetForm.total} onChange={e => setBudgetForm(f => ({ ...f, total: e.target.value }))} />
+              </div>
+              <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 8px" }}>Presupuesto por categoría (opcional)</p>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
+                {EXPENSE_CATS.map(c => (
+                  <div key={c}>
+                    <label style={{ fontSize: 12, color: "var(--color-text-secondary)", display: "block", marginBottom: 3 }}>{c}</label>
+                    <input style={inputStyle} type="number" placeholder="0.00" value={budgetForm.cats[c] || ""} onChange={e => setBudgetForm(f => ({ ...f, cats: { ...f.cats, [c]: e.target.value } }))} />
+                  </div>
+                ))}
+              </div>
+              <button onClick={saveBudget} style={{ ...btnStyle(true), padding: "7px 18px" }}>Guardar presupuesto</button>
+            </div>
+          )}
+
+          {/* Budget summary */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8, marginBottom: 12 }}>
+            {[
+              { label: "Presupuesto", val: total > 0 ? fmt(total) : "Sin definir", color: "var(--color-text-primary)" },
+              { label: "Gastado", val: fmt(spent), color: "#185FA5" },
+              { label: "Disponible", val: fmt(available), color: over ? "var(--color-text-danger)" : "#3B6D11" },
+              { label: "% usado", val: total > 0 ? `${pct.toFixed(1)}%` : "—", color: over ? "var(--color-text-danger)" : pct >= 80 ? "#BA7517" : "var(--color-text-primary)" },
+            ].map(s => (
+              <div key={s.label} style={{ background: "var(--color-background-secondary)", borderRadius: "var(--border-radius-md)", padding: "10px 12px" }}>
+                <p style={{ margin: "0 0 3px", fontSize: 11, color: "var(--color-text-secondary)" }}>{s.label}</p>
+                <p style={{ margin: 0, fontSize: 16, fontWeight: 500, color: s.color }}>{s.val}</p>
+              </div>
+            ))}
+          </div>
+          {total > 0 && <BudgetBar spent={spent} total={total} />}
+          {over && <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--color-text-danger)", fontWeight: 500 }}>Presupuesto excedido por {fmt(spent - total)}</p>}
+        </div>
+
+        {/* Category breakdown */}
+        <div style={{ background: "var(--color-background-primary)", border: "0.5px solid var(--color-border-tertiary)", borderRadius: "var(--border-radius-lg)", padding: "1rem 1.25rem", marginBottom: 12 }}>
+          <p style={{ fontSize: 13, fontWeight: 500, margin: "0 0 12px" }}>Desglose por categoría</p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {EXPENSE_CATS.filter(c => catTotals[c] > 0 || (bdata.catBudgets || {})[c]).map(c => {
+              const cSpent = catTotals[c] || 0;
+              const cBudget = (bdata.catBudgets || {})[c] || 0;
+              const cPct = cBudget > 0 ? Math.min(100, (cSpent / cBudget) * 100) : 0;
+              return (
+                <div key={c}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                    <CatBadge cat={c} />
+                    <div style={{ fontSize: 13, textAlign: "right" }}>
+                      <span style={{ fontWeight: 500 }}>{fmt(cSpent)}</span>
+                      {cBudget > 0 && <span style={{ color: "var(--color-text-secondary)" }}> / {fmt(cBudget)}</span>}
+                    </div>
+                  </div>
+                  {cBudget > 0 && <BudgetBar spent={cSpent} total={cBudget} />}
+                </div>
+              );
+            })}
+            {EXPENSE_CATS.every(c => !catTotals[c] && !(bdata.catBudgets || {})[c]) && (
+              <p style={{ fontSize: 13, color: "var(--color-text-secondary)", margin: 0 }}>Sin gastos registrados aún.</p>
+            )}
+          </div>
+        </div>
+
+        {/* Expenses */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <h3 style={{ fontSize: 15, fontWeight: 500, margin: 0 }}>Gastos registrados</h3>
+          <button onClick={() => {
+            setEditingExpId(null);
+            setExpForm({ desc: "", monto: "", cat: "Materiales", fecha: new Date().toISOString().slice(0, 10), proveedor: "" });
+            setShowExpForm(v => !v);
+          }} style={{ ...btnStyle(true), padding: "6px 14px" }}>
+            {showExpForm && !editingExpId ? "Cancelar" : "+ Agregar gasto"}
+          </button>
+        </div>
+
+        {showExpForm && (
+          <div style={{ background: "var(--color-background-primary)", border: "0.5px solid var(--color-border-secondary)", borderRadius: "var(--border-radius-lg)", padding: "1rem 1.25rem", marginBottom: 12 }}>
+            <p style={{ fontSize: 13, fontWeight: 500, margin: "0 0 10px" }}>{editingExpId ? "Editar gasto" : "Nuevo gasto"}</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div>
+                <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Descripción *</label>
+                <input style={inputStyle} value={expForm.desc} onChange={e => setExpForm(f => ({ ...f, desc: e.target.value }))} placeholder="Ej: Tubería PVC 4 pulgadas" />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div>
+                  <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Monto ($) *</label>
+                  <input style={inputStyle} type="number" step="0.01" placeholder="0.00" value={expForm.monto} onChange={e => setExpForm(f => ({ ...f, monto: e.target.value }))} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Categoría</label>
+                  <select style={inputStyle} value={expForm.cat} onChange={e => setExpForm(f => ({ ...f, cat: e.target.value }))}>
+                    {EXPENSE_CATS.map(c => <option key={c}>{c}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div>
+                  <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Fecha</label>
+                  <input style={inputStyle} type="date" value={expForm.fecha} onChange={e => setExpForm(f => ({ ...f, fecha: e.target.value }))} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 13, color: "var(--color-text-secondary)", display: "block", marginBottom: 4 }}>Proveedor / Contratista</label>
+                  <input style={inputStyle} value={expForm.proveedor} onChange={e => setExpForm(f => ({ ...f, proveedor: e.target.value }))} placeholder="Nombre o empresa" />
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={addExpense} style={{ ...btnStyle(true), padding: "7px 18px" }}>{editingExpId ? "Guardar cambios" : "Guardar gasto"}</button>
+                <button onClick={() => { setShowExpForm(false); setEditingExpId(null); setExpForm({ desc: "", monto: "", cat: "Materiales", fecha: new Date().toISOString().slice(0, 10), proveedor: "" }); }} style={{ ...btnStyle(false), padding: "7px 18px" }}>Cancelar</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {sortedExp.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "2rem 1rem", color: "var(--color-text-secondary)", fontSize: 14, background: "var(--color-background-primary)", border: "0.5px solid var(--color-border-tertiary)", borderRadius: "var(--border-radius-lg)" }}>
+            No hay gastos registrados. Agrega el primero.
+          </div>
+        ) : (
+          <div style={{ background: "var(--color-background-primary)", border: "0.5px solid var(--color-border-tertiary)", borderRadius: "var(--border-radius-lg)", overflow: "hidden" }}>
+            {sortedExp.map((e, i) => (
+              <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 16px", borderBottom: i < sortedExp.length - 1 ? "0.5px solid var(--color-border-tertiary)" : "none" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ margin: "0 0 3px", fontSize: 14, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.desc}</p>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <CatBadge cat={e.cat} />
+                    {e.proveedor && <span style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>{e.proveedor}</span>}
+                    <span style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>{e.fecha?.split("-").reverse().join("/")}</span>
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                  <span style={{ fontWeight: 500, fontSize: 15 }}>{fmt(e.monto)}</span>
+                  <button onClick={() => {
+                    setEditingExpId(e.id);
+                    setExpForm({ desc: e.desc, monto: e.monto, cat: e.cat, fecha: e.fecha, proveedor: e.proveedor || "" });
+                    setShowExpForm(true);
+                    setTimeout(() => document.getElementById('ef-desc')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
+                  }} style={{ padding: "3px 8px", fontSize: 12, borderRadius: "var(--border-radius-md)", border: "0.5px solid var(--color-border-secondary)", background: "transparent", color: "var(--color-text-secondary)", cursor: "pointer" }}>Editar</button>
+                  <button onClick={() => deleteExpense(e.id)} style={{ padding: "3px 8px", fontSize: 12, borderRadius: "var(--border-radius-md)", border: "0.5px solid var(--color-border-danger)", background: "transparent", color: "var(--color-text-danger)", cursor: "pointer" }}>×</button>
+                </div>
+              </div>
+            ))}
+            <div style={{ padding: "10px 16px", background: "var(--color-background-secondary)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>Total gastado</span>
+              <span style={{ fontSize: 16, fontWeight: 500 }}>{fmt(spent)}</span>
+            </div>
+          </div>
+        )}
       </div>
-      <div style="display:flex;gap:8px"><button class="primary" style="padding:7px 18px" onclick="addExpense()">Guardar gasto</button><button style="padding:7px 18px" onclick="toggleEF()">Cancelar</button></div>
-    </div>
-  </div>`:''}
-  ${sorted.length===0?`<div class="card" style="text-align:center;padding:2rem 1rem;color:var(--text2);font-size:14px">Sin gastos registrados aún.</div>`:`
-  <div class="card" style="padding:0;overflow:hidden">
-    ${sorted.map(e=>`
-    <div class="expense-row">
-      <div style="flex:1;min-width:0"><p style="font-weight:500;font-size:14px;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.desc}</p>
-      <div class="flex-gap">${catBadge(e.cat)}${e.proveedor?`<span style="font-size:11px;color:var(--text2)">${e.proveedor}</span>`:''}<span style="font-size:11px;color:var(--text2)">${e.fecha?.split('-').reverse().join('/')}</span></div></div>
-      <div style="display:flex;align-items:center;gap:10px;flex-shrink:0"><span style="font-weight:500;font-size:15px">${fmt(e.monto)}</span><button class="danger-btn" onclick="delExpense('${e.id}')">×</button></div>
-    </div>`).join('')}
-    <div style="padding:10px 16px;background:var(--bg2);display:flex;justify-content:space-between"><span style="font-size:13px;color:var(--text2)">Total gastado</span><span style="font-size:16px;font-weight:500">${fmt(spent)}</span></div>
-  </div>`}`;
+    );
+  }
+
+  return null;
 }
-
-function nav() { state.view='dashboard'; state.selId=null; state.showBF=false; state.showEF=false; render(); }
-function openProj(id) { state.selId=id; state.view='detail'; state.showBF=false; state.showEF=false; render(); }
-function toggleBF() { state.showBF=!state.showBF; if(state.showBF) state.showEF=false; render(); }
-function toggleEF() { state.showEF=!state.showEF; if(state.showEF) state.showBF=false; render(); }
-
-async function saveBudget() {
-  const total=parseFloat(document.getElementById('bf-total').value)||0;
-  const catBudgets={};
-  CATS.forEach(c=>{ const el=document.getElementById('bf-'+c.replace(/ /g,'_')); if(el&&el.value) catBudgets[c]=parseFloat(el.value)||0; });
-  const b=state.budgets[state.selId];
-  const data={ total, catBudgets, updatedAt:serverTimestamp() };
-  if (b?.docId) { await updateDoc(doc(db,'budgets',state.selId),data); }
-  else { await updateDoc(doc(db,'budgets',state.selId),data).catch(async ()=>{ await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js").then(async({setDoc})=>{ await setDoc(doc(db,'budgets',state.selId),{...data,expenses:[]}); }); }); }
-  state.showBF=false;
-  toast('Presupuesto guardado');
-}
-
-async function addExpense() {
-  const desc=document.getElementById('ef-desc').value.trim();
-  const monto=parseFloat(document.getElementById('ef-monto').value);
-  if (!desc||!monto) return;
-  const exp={ id:genId(), desc, monto, cat:document.getElementById('ef-cat').value, fecha:document.getElementById('ef-fecha').value, proveedor:document.getElementById('ef-prov').value.trim() };
-  const b=state.budgets[state.selId]||{expenses:[]};
-  const newExps=[...(b.expenses||[]),exp];
-  const ref=doc(db,'budgets',state.selId);
-  try { await updateDoc(ref,{expenses:newExps,updatedAt:serverTimestamp()}); }
-  catch { const {setDoc}=await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js"); await setDoc(ref,{total:0,catBudgets:{},expenses:newExps,updatedAt:serverTimestamp()}); }
-  state.ef={desc:'',monto:'',cat:'Materiales',fecha:new Date().toISOString().slice(0,10),proveedor:''};
-  state.showEF=false;
-  toast('Gasto agregado');
-}
-
-async function delExpense(expId) {
-  if (!confirm('¿Eliminar este gasto?')) return;
-  const b=state.budgets[state.selId];
-  const newExps=(b.expenses||[]).filter(e=>e.id!==expId);
-  await updateDoc(doc(db,'budgets',state.selId),{expenses:newExps,updatedAt:serverTimestamp()});
-  toast('Gasto eliminado');
-}
-
-window.nav=nav; window.openProj=openProj; window.toggleBF=toggleBF; window.toggleEF=toggleEF;
-window.saveBudget=saveBudget; window.addExpense=addExpense; window.delExpense=delExpense;
-
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
-</script>
-</body>
-</html>
